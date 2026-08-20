@@ -3,21 +3,26 @@ Interface Streamlit para testar o chatbot de AASI antes de plugar no WhatsApp.
 Mostra também os trechos (fonte + seção + página aproximada) usados em
 cada resposta, para o usuário poder validar a informação.
 
+Navegação por barra lateral (não por st.tabs()): isso é proposital, não
+estético. st.chat_input() só fica fixado automaticamente no rodapé da
+página quando chamado no nível principal do script — dentro de um
+st.tabs() (ou st.columns(), st.container(), etc.) ele perde esse
+comportamento e passa a se comportar como um widget qualquer, empurrado
+para baixo a cada nova mensagem. É uma limitação conhecida do Streamlit,
+sem correção nativa até o momento (ver issues #7814 e #8564 no repositório
+do Streamlit). Por isso: st.chat_input() fica solto no corpo principal,
+dentro de um "if" simples — condicionais não têm esse problema, só
+containers de layout têm.
+
 Duas otimizações de performance:
 1. st.cache_resource — o carregamento pesado (modelo de embeddings, conexão
    com o ChromaDB, construção do índice BM25) roda só UMA VEZ por processo
    do servidor, não a cada pergunta nem a cada reinicialização de sessão.
-   Isso já acontecia "de graça" por causa do cache de import do Python,
-   mas usar st.cache_resource explicitamente é mais robusto (sobrevive a
-   recarregamento automático de módulos em modo dev) e mostra um spinner
-   de carregamento pro usuário na primeira vez.
 2. st.cache_data — a resposta completa (triagem + busca + geração) fica
-   em cache por pergunta EXATA (mesmo texto), por até 1h. Se dois alunos
-   perguntarem a mesma coisa, a segunda vez é instantânea, sem gastar
-   chamada de API do Gemini de novo.
+   em cache por pergunta EXATA (mesmo texto), por até 1h.
 
 Uso:
-    streamlit run app.py
+    streamlit run streamlit_app.py
 """
 import streamlit as st
 
@@ -74,9 +79,33 @@ def listar_pdfs() -> list[dict]:
     return info
 
 
-aba_chat, aba_pdfs = st.tabs(["💬 Chat", "📚 PDFs do curso"])
+def _renderizar_fontes(fontes):
+    with st.expander("Ver trechos usados"):
+        for f in fontes:
+            st.markdown(f"**{_formatar_referencia(f)}**")
+            st.text(f["texto"])
+            st.divider()
 
-with aba_chat:
+
+with st.sidebar:
+    st.subheader("Navegação")
+    pagina = st.radio(
+        "Ir para:", ["💬 Chat", "📚 PDFs do curso"], label_visibility="collapsed"
+    )
+    st.divider()
+    st.subheader("Sobre")
+    st.write(
+        "Este bot responde apenas dúvidas conceituais sobre AASI "
+        "com base no material didático. Perguntas que parecem "
+        "relato de sintoma pessoal são desviadas para atendimento clínico. "
+        "Toda resposta cita a seção e a página aproximada de origem."
+    )
+    if pagina == "💬 Chat" and st.button("Limpar conversa"):
+        st.session_state.mensagens = []
+        st.rerun()
+
+
+if pagina == "💬 Chat":
     st.title("🎧 Tira-dúvidas — AASI")
     st.caption(
         "Assistente de estudo baseado no material didático do curso. "
@@ -86,19 +115,15 @@ with aba_chat:
     if "mensagens" not in st.session_state:
         st.session_state.mensagens = []
 
-    def _renderizar_fontes(fontes):
-        with st.expander("Ver trechos usados"):
-            for f in fontes:
-                st.markdown(f"**{_formatar_referencia(f)}**")
-                st.text(f["texto"])
-                st.divider()
-
     for msg in st.session_state.mensagens:
         with st.chat_message(msg["role"]):
             st.markdown(msg["conteudo"])
             if msg.get("fontes"):
                 _renderizar_fontes(msg["fontes"])
 
+    # st.chat_input() precisa ficar aqui, solto no corpo principal (sem
+    # estar dentro de st.tabs/columns/container), para ficar fixado no
+    # rodapé da página — ver explicação no topo do arquivo.
     pergunta = st.chat_input("Digite sua dúvida sobre AASI...")
 
     if pergunta:
@@ -119,19 +144,7 @@ with aba_chat:
             {"role": "assistant", "conteudo": resposta, "fontes": fontes}
         )
 
-    with st.sidebar:
-        st.subheader("Sobre")
-        st.write(
-            "Este bot responde apenas dúvidas conceituais sobre AASI "
-            "com base no material didático. Perguntas que parecem "
-            "relato de sintoma pessoal são desviadas para atendimento clínico. "
-            "Toda resposta cita a seção e a página aproximada de origem."
-        )
-        if st.button("Limpar conversa"):
-            st.session_state.mensagens = []
-            st.rerun()
-
-with aba_pdfs:
+else:
     st.title("📚 PDFs usados neste dataset")
     st.caption("Material didático indexado para responder às dúvidas dos alunos.")
 
