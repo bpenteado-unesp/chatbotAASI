@@ -1,0 +1,17 @@
+# Modelo de embeddings baixado do Hugging Face — NUNCA versionar.
+# É baixado automaticamente em tempo de execução (local ou Streamlit
+# Cloud) na primeira vez que o app roda, e cacheado aqui. Local ou nuvem,
+# esse download acontece de novo se a pasta não existir.
+assets/
+
+# Segredos — NUNCA versionar. No Streamlit Cloud, a chave é configurada
+# pelo painel do próprio serviço (Settings > Secrets), não por este
+# arquivo.
+.streamlit/secrets.toml
+
+# Cache do Python
+__pycache__/
+*.pyc
+
+# NOTA: ./data/chromadb NÃO está aqui de propósito — ele PRECISA ser
+# versionado (veja explicação no README), diferente do modelo bruto.
